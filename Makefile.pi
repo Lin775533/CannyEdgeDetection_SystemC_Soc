@@ -1,0 +1,87 @@
+# Makefile for Raspberry Pi 5 with ARM optimizations
+
+# Adjust these paths to match your SystemC installation on Raspberry Pi
+SYSTEMC_HOME = /usr/local/systemc-2.3.3
+SYSTEMC_ARCH = linux64
+
+# Include and library paths
+INCLUDE = -I. -I$(SYSTEMC_HOME)/include
+LIBRARY = $(SYSTEMC_HOME)/lib-$(SYSTEMC_ARCH)
+LIBS    = -L$(LIBRARY) -lsystemc -lm
+
+# Compiler settings
+CC = g++
+
+# Try to detect if we're on ARM
+ARCH := $(shell uname -m)
+ifeq ($(findstring arm,$(ARCH)),arm)
+    # ARM-specific flags for Pi 5 (Cortex-A76)
+    ARCH_FLAGS = -march=armv8.2-a -mcpu=cortex-a76 -mtune=cortex-a76
+else
+    # Default to native architecture
+    ARCH_FLAGS = -march=native -mtune=native
+endif
+
+# Base optimization flags
+BASE_FLAGS = -O3 \
+         $(ARCH_FLAGS) \
+         -ffast-math \
+         -funroll-loops \
+         -ftree-vectorize \
+         -fomit-frame-pointer
+
+# Advanced optimization flags
+ADV_FLAGS = $(BASE_FLAGS) \
+         -ffinite-math-only \
+         -fno-trapping-math \
+         -frename-registers \
+         -fno-stack-protector \
+         -flto \
+         -fno-signed-zeros \
+         -fno-math-errno
+
+# Maximum optimization flags
+MAX_FLAGS = $(ADV_FLAGS) \
+         -funsafe-math-optimizations \
+         -fmodulo-sched \
+         -fmodulo-sched-allow-regmoves \
+         -fsched-pressure \
+         -fsched-spec-load \
+         -freschedule-modulo-scheduled-loops \
+         -ftree-loop-distribution \
+         -ftree-loop-im \
+         -ftree-loop-ivcanon \
+         -fivopts
+
+RM = rm -f
+
+# Different optimization targets
+all: canny_O3 canny_adv canny_max
+
+# Basic O3 optimization
+canny_O3: canny.cpp
+	$(CC) $(INCLUDE) -O3 $(ARCH_FLAGS) $< -o $@ $(LIBS)
+
+# Advanced optimization
+canny_adv: canny.cpp
+	$(CC) $(INCLUDE) $(ADV_FLAGS) $< -o $@ $(LIBS)
+
+# Maximum optimization
+canny_max: canny.cpp
+	$(CC) $(INCLUDE) $(MAX_FLAGS) $< -o $@ $(LIBS)
+
+# Run all versions and compare
+test: canny_O3 canny_adv canny_max
+	@echo "Architecture: $(ARCH)"
+	@echo "Using flags: $(ARCH_FLAGS)"
+	@echo "\nTesting O3 optimization:"
+	time ./canny_O3
+	@echo "\nTesting advanced optimization:"
+	time ./canny_adv
+	@echo "\nTesting maximum optimization:"
+	time ./canny_max
+
+clean:
+	$(RM) canny_O3 canny_adv canny_max *.o
+
+.PHONY: all clean test
